@@ -1,0 +1,2392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>福气接福 - 春节主题休闲小游戏</title>
+    <style>
+        /* 加载自定义字体 */
+        @font-face {
+            font-family: 'Coca-ColaCareFontKaiTi';
+            src: url('Coca-ColaCareFontKaiTi.TTF') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #c40000;
+            font-family: 'Coca-ColaCareFontKaiTi', 'SimHei', 'STHeiti', sans-serif;
+        }
+        canvas {
+            display: block;
+            cursor: pointer;
+        }
+        
+
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <audio id="backgroundMusic" loop>
+        <source src="sounds/beijingyinyue.mp3?v=2" type="audio/mpeg">
+       </audio>
+    
+
+    <script>
+        // 游戏主循环与状态管理
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 全局样式常量
+        const BUTTON_RADIUS = 20;
+        
+        // 福卡历史总数数据管理
+        function getCardTotals() {
+            try {
+                const saved = localStorage.getItem('cardTotals');
+                if (saved) {
+                    return JSON.parse(saved);
+                } else {
+                    // 初始化默认值
+                    return {
+                        wenfuka: 0,
+                        caifuka: 0,
+                        dengfuka: 0,
+                        shifuka: 0,
+                        qianfuka: 0
+                    };
+                }
+            } catch (error) {
+                console.error('获取福卡历史总数失败:', error);
+                return {
+                    wenfuka: 0,
+                    caifuka: 0,
+                    dengfuka: 0,
+                    shifuka: 0,
+                    qianfuka: 0
+                };
+            }
+        }
+        
+        function saveCardTotals(totals) {
+            try {
+                localStorage.setItem('cardTotals', JSON.stringify(totals));
+            } catch (error) {
+                console.error('保存福卡历史总数失败:', error);
+            }
+        }
+        
+        // 增加福卡历史总数
+        function incrementCardTotal(cardType) {
+            const totals = getCardTotals();
+            if (totals[cardType] !== undefined) {
+                totals[cardType]++;
+                saveCardTotals(totals);
+            }
+        }
+        
+        // 音频控制
+        const backgroundMusic = document.getElementById('backgroundMusic');
+        // MOD: 背景音乐默认无限循环
+        backgroundMusic.loop = true;
+        
+        // 音效控制
+        // ⚠️ 替换音效后：1. 将 yanhuazhongyin.mp3 放入 /sounds 目录 2. 清除浏览器缓存 3. 刷新页面
+        const clickSound = new Audio('sounds/shubiaodianji.mp3?v=' + Date.now());
+        const fireworksSound = new Audio('sounds/yanhuazhongyin.mp3?v=' + Date.now());
+        const collectSound = new Audio('sounds/liziyanhua.mp3?v=' + Date.now());
+        const gunziluodiSound = new Audio('sounds/gunziluodi.mp3?v=' + Date.now());
+        const wanshengSound = new Audio('sounds/wansheng.mp3?v=' + Date.now());
+        const youxishibaiSound = new Audio('sounds/youxishibai.mp3?v=' + Date.now());
+        const youxishengliSound = new Audio('sounds/youxishengli.mp3?v=' + Date.now());
+        
+        // 为音效添加错误处理
+        clickSound.onerror = () => console.error('【音效错误】点击音效文件缺失！');
+        fireworksSound.onerror = () => console.error('【音效错误】烟花音效文件缺失！');
+        collectSound.onerror = () => console.error('【音效错误】收集音效文件缺失！');
+        gunziluodiSound.onerror = () => console.error('【音效错误】棍子落地音效文件缺失！');
+        wanshengSound.onerror = () => console.error('【音效错误】破碗碰撞音效文件缺失！');
+        youxishibaiSound.onerror = () => console.error('【音效错误】失败结算音效文件缺失！');
+        youxishengliSound.onerror = () => console.error('【音效错误】成功结算音效文件缺失！');
+        
+        // 通用音效播放函数
+        function playSound(soundName) {
+            let sound;
+            switch(soundName) {
+                case 'click':
+                    sound = clickSound;
+                    sound.volume = 0.7;
+                    break;
+                case 'fireworks':
+                    sound = fireworksSound;
+                    sound.volume = 1.0;
+                    break;
+                case 'collect':
+                    sound = collectSound;
+                    sound.volume = 0.6;
+                    break;
+                case 'gunziluodi':
+                    sound = gunziluodiSound;
+                    sound.volume = 0.8;
+                    break;
+                case 'wansheng':
+                    sound = wanshengSound;
+                    sound.volume = 0.8;
+                    break;
+                case 'youxishibai':
+                    sound = youxishibaiSound;
+                    sound.volume = 0.8;
+                    break;
+                case 'youxishengli':
+                    sound = youxishengliSound;
+                    sound.volume = 0.8;
+                    break;
+                default:
+                    return;
+            }
+            
+            console.log(`【音效播放】${soundName}音效路径:`, sound.src);
+            sound.currentTime = 0; // 重置音效，确保可以连续播放
+            sound.play().catch(error => {
+                console.log(`${soundName}音效播放需要用户交互:`, error);
+            });
+        }
+        
+        // 播放点击音效
+        function playClickSound() {
+            playSound('click');
+        }
+        
+        // 播放粒子烟花音效
+        function playFireworksSound() {
+            playSound('fireworks');
+        }
+        
+        // 播放收集物品音效
+        function playCollectSound() {
+            playSound('collect');
+        }
+        
+
+        
+        // 检查音频文件是否可加载
+        function checkAudioAvailability() {
+            const audioTest = new Audio('sounds/beijingyinyue.mp3?v=' + Date.now());
+            console.log('【音频加载】背景音乐路径:', audioTest.src);
+            audioTest.addEventListener('canplaythrough', function() {
+                // 音频文件可加载
+                console.log('【音频加载】背景音乐加载成功');
+            });
+            audioTest.addEventListener('error', function() {
+                // 音频文件加载失败
+                console.error('【音频错误】背景音乐文件缺失！');
+            });
+            audioTest.load();
+        }
+        
+        // 页面加载时检查音频可用性
+        window.addEventListener('load', checkAudioAvailability);
+        
+        // 初始化背景音乐
+        function initBackgroundMusic() {
+            // 设置默认音量
+            backgroundMusic.volume = 0.5;
+            // 尝试播放背景音乐
+            backgroundMusic.play().catch(error => {
+                console.log('音乐播放需要用户交互，将在用户点击时启动:', error);
+            });
+        }
+        
+        // 页面加载时初始化背景音乐
+        window.addEventListener('load', initBackgroundMusic);
+        
+        // 等级体系配置
+        const RANK_SYSTEM = {
+            // 基础段位（含小段位）
+            basicRanks: [
+                { name: "倔强青铜", title: "纳福萌新", segments: 1, starsPerSegment: 6 },
+                { name: "秩序白银", title: "聚福好手", segments: 1, starsPerSegment: 6 },
+                { name: "荣耀黄金", title: "迎福达人", segments: 3, starsPerSegment: 6 },
+                { name: "尊贵铂金", title: "纳福高手", segments: 3, starsPerSegment: 6 },
+                { name: "永恒钻石", title: "福气大师", segments: 3, starsPerSegment: 6 },
+                { name: "至尊星耀", title: "福运宗师", segments: 5, starsPerSegment: 6 },
+                { name: "最强王者", title: "臻福宗师", segments: 5, starsPerSegment: 6 }
+            ],
+            // 高阶段位（无小段位，仅计星数）
+            advancedRanks: [
+                { name: "荣耀王者", title: "耀福王者", starsPerSegment: 0 },
+                { name: "传奇王者", title: "福御王者", starsPerSegment: 0 }
+            ],
+            // 总段位数量
+            totalRanks: function() {
+                return this.basicRanks.length + this.advancedRanks.length;
+            },
+            // 获取段位配置
+            getRankConfig: function(rankIndex) {
+                if (rankIndex < this.basicRanks.length) {
+                    return this.basicRanks[rankIndex];
+                } else {
+                    return this.advancedRanks[rankIndex - this.basicRanks.length];
+                }
+            },
+            // 判断是否为高级段位
+            isAdvancedRank: function(rankIndex) {
+                return rankIndex >= this.basicRanks.length;
+            }
+        };
+        
+        // 游戏状态
+        let gameState = {
+            score: 0,
+            combo: 0,
+            isGameOver: false,
+            isVictory: false,
+            isStartScreen: true,
+            isHistoryScreen: false,
+            isNewRecord: false,
+            showNewRecordText: false,
+            newRecordTextTime: 0,
+            endReason: '',
+            player: {
+                x: 0,
+                y: 0,
+                width: 80,
+                height: 80
+            },
+            items: [],
+            collectedItems: {
+                redPacket: 0,
+                dumpling: 0,
+                lantern: 0,
+                couplet: 0,
+                luckyMoney: 0
+            },
+            fucards: [],
+            particleEffects: [],
+            lastItemTime: 0,
+            itemSpawnInterval: 250,
+            // 等级系统状态
+            rankState: {
+                rankIndex: 0,       // 当前段位索引
+                segmentIndex: 0,    // 当前小段位索引
+                stars: 0,           // 当前星星数
+                isPromoted: false,  // 是否晋升
+                isDemoted: false,   // 是否降级
+                starsEarned: 0,     // 本局获得星星数
+                starsLost: 0,       // 本局失去星星数
+                // 动画状态
+                animationState: {
+                    isAnimating: false,
+                    animationStartTime: 0,
+                    currentStar: 0,
+                    animationType: '' // 'add', 'remove', 'promote'
+                }
+            }
+        };
+        
+        // 设置Canvas尺寸为全屏
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // 调整玩家位置
+            gameState.player.x = canvas.width / 2;
+            gameState.player.y = canvas.height - 80;
+        }
+        
+        // 初始化Canvas尺寸
+        resizeCanvas();
+        
+        // 监听窗口大小变化
+        window.addEventListener('resize', resizeCanvas);
+        
+        // 隐藏鼠标指针
+        function hideCursor() {
+            document.body.style.cursor = 'none';
+        }
+        
+        // 显示鼠标指针
+        function showCursor() {
+            document.body.style.cursor = 'auto';
+        }
+        
+        // 初始化时隐藏鼠标指针
+        hideCursor();
+        
+        // 物品类型定义
+        const ITEM_TYPES = {
+            // 福气物品
+            redPacket: { name: '红包', type: 'blessing', score: 10, color: '#ff4444' },
+            dumpling: { name: '饺子', type: 'blessing', score: 10, color: '#ffaa88' },
+            lantern: { name: '灯笼', type: 'blessing', score: 10, color: '#ff8800' },
+            couplet: { name: '春联', type: 'blessing', score: 10, color: '#ff0000' },
+            luckyMoney: { name: '压岁钱', type: 'blessing', score: 10, color: '#ffff00' },
+            // 霉运物品
+            broom: { name: '扫把', type: 'bad', score: 0, color: '#888888' },
+            brokenBowl: { name: '破碗', type: 'bad', score: 0, color: '#aaaaaa' }
+        };
+        
+        // 福卡定义（改为图标类型）
+        const FUCARDS = {
+            redPacket: 'caifuka',
+            dumpling: 'shifuka',
+            lantern: 'dengfuka',
+            couplet: 'wenfuka',
+            luckyMoney: 'qianfuka'
+        };
+        
+        // 加载图片资源
+        const itemImages = {
+            redPacket: new Image(),
+            dumpling: new Image(),
+            lantern: new Image(),
+            couplet: new Image(),
+            luckyMoney: new Image(),
+            broom: new Image(),
+            brokenBowl: new Image()
+        };
+        
+        itemImages.redPacket.src = 'hongbao@1x.png';
+        itemImages.dumpling.src = 'jiaozi@1x.png';
+        itemImages.lantern.src = 'denglou@1x.png';
+        itemImages.couplet.src = 'fu@1x.png';
+        itemImages.luckyMoney.src = 'yasuiqian@1x.png';
+        itemImages.broom.src = 'saoba@1x.png';
+        itemImages.brokenBowl.src = 'powan@1x.png';
+        
+        // 加载玩家图片
+        const playerImage = new Image();
+        playerImage.src = 'ma@2x.png';
+        
+        // 加载背景图片
+        const backgroundImage = new Image();
+        backgroundImage.src = 'beijing.png';
+        
+        // 加载标题图片
+        const titleImage = new Image();
+        titleImage.src = 'biaoti.png';
+        
+        // 加载福卡图标
+        const fucardImages = {
+            wenfuka: new Image(),
+            caifuka: new Image(),
+            dengfuka: new Image(),
+            shifuka: new Image(),
+            qianfuka: new Image()
+        };
+        fucardImages.wenfuka.src = 'wenfuka.png';
+        fucardImages.caifuka.src = 'caifuka.png';
+        fucardImages.dengfuka.src = 'dengfuka.png';
+        fucardImages.shifuka.src = 'shifuka.png';
+        fucardImages.qianfuka.src = 'qianfuka.png';
+        
+        // 图片预加载管理
+        let imagesLoaded = 0;
+        let totalImages = 0;
+        let isLoadingComplete = false;
+        
+        function preloadImages() {
+            // 收集所有需要预加载的图片
+            const allImages = [
+                backgroundImage,
+                playerImage,
+                titleImage,
+                itemImages.redPacket,
+                itemImages.dumpling,
+                itemImages.lantern,
+                itemImages.couplet,
+                itemImages.luckyMoney,
+                itemImages.broom,
+                itemImages.brokenBowl,
+                fucardImages.wenfuka,
+                fucardImages.caifuka,
+                fucardImages.dengfuka,
+                fucardImages.shifuka,
+                fucardImages.qianfuka,
+                rankIcons.nafumengxin,
+                rankIcons.nafuhaoshou,
+                rankIcons.nafugaoshou,
+                rankIcons.fuqidashi,
+                rankIcons.zhenfuzongshi,
+                rankIcons.yaofuangzhe,
+                rankIcons.wanfuwangzhe,
+                rankIcons.rongyaowangzhe,
+                rankIcons.chuanqiwangzhe
+            ];
+            
+            totalImages = allImages.length;
+            
+            if (totalImages === 0) {
+                loadingComplete();
+                return;
+            }
+            
+            // 为每个图片添加加载完成监听器
+            allImages.forEach(img => {
+                img.onload = () => {
+                    imagesLoaded++;
+                    if (imagesLoaded === totalImages) {
+                        loadingComplete();
+                    }
+                };
+                img.onerror = () => {
+                    console.error('图片加载失败:', img.src);
+                    imagesLoaded++;
+                    if (imagesLoaded === totalImages) {
+                        loadingComplete();
+                    }
+                };
+            });
+        }
+        
+        function loadingComplete() {
+            isLoadingComplete = true;
+            console.log('所有图片资源加载完成');
+        }
+        
+        // 加载段位图标
+        const rankIcons = {
+            nafumengxin: new Image(),
+            nafuhaoshou: new Image(),
+            nafugaoshou: new Image(),
+            fuqidashi: new Image(),
+            zhenfuzongshi: new Image(),
+            yaofuangzhe: new Image(),
+            wanfuwangzhe: new Image(),
+            rongyaowangzhe: new Image(),
+            chuanqiwangzhe: new Image()
+        };
+        rankIcons.nafumengxin.src = 'nafumengxin.png';
+        rankIcons.nafuhaoshou.src = 'nafugaoshou.png'; // 聚福好手系列
+        rankIcons.nafugaoshou.src = 'nafugaoshou.png'; // 迎福高手全段位
+        rankIcons.fuqidashi.src = 'fuqidashi.png'; // 集福大师全段位
+        rankIcons.zhenfuzongshi.src = 'zhenfuzongshi.png'; // 臻福宗师全段位
+        rankIcons.yaofuangzhe.src = 'yaofuangzhe.png'; // 耀福王者全段位
+        rankIcons.wanfuwangzhe.src = 'yufuwangzhe.png'; // 万福王者全段位
+        rankIcons.rongyaowangzhe.src = 'yingfudaren.png'; // 福耀王者
+        rankIcons.chuanqiwangzhe.src = 'qianfuka.png'; // 福御王者
+        
+        // 启动图片预加载
+        preloadImages();
+        
+
+        
+        // 游戏主循环
+        function gameLoop() {
+            if (!gameState.isGameOver && !gameState.isStartScreen && !gameState.isHistoryScreen) {
+                update();
+            }
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 更新游戏状态
+        function update() {
+            // 生成物品
+            const now = Date.now();
+            if (now - gameState.lastItemTime > gameState.itemSpawnInterval) {
+                spawnItem();
+                gameState.lastItemTime = now;
+            }
+            
+            // 更新物品位置
+            updateItems();
+            
+            // 检测碰撞
+            checkCollisions();
+            
+            // 检查是否超过历史记录
+            if (!gameState.showNewRecordText && gameState.score > getHighScore()) {
+                gameState.showNewRecordText = true;
+                gameState.newRecordTextTime = Date.now();
+            }
+            
+            // 检查新记录提示是否需要消失
+            if (gameState.showNewRecordText && Date.now() - gameState.newRecordTextTime > 2000) {
+                gameState.showNewRecordText = false;
+            }
+            
+            // 检查分数里程碑和新记录
+            if (gameState.score > getHighScore()) {
+                // 刷新纪录时保存游戏记录
+                saveGameRecord();
+                gameState.showNewRecordText = true;
+                gameState.newRecordTextTime = Date.now();
+                updateHighScore(gameState.score);
+            }
+            
+            // 更新粒子效果
+            updateParticles();
+        }
+        
+        // 游戏主循环与状态管理模块结束
+        
+        // 输入控制（鼠标/触摸）
+        // 鼠标移动事件
+        canvas.addEventListener('mousemove', function(e) {
+            if (!gameState.isGameOver && !gameState.isStartScreen) {
+                const rect = canvas.getBoundingClientRect();
+                gameState.player.x = e.clientX - rect.left - gameState.player.width / 2;
+                // 限制玩家在画布内
+                gameState.player.x = Math.max(0, Math.min(canvas.width - gameState.player.width, gameState.player.x));
+            }
+        });
+        
+        // 触摸移动事件
+        canvas.addEventListener('touchmove', function(e) {
+            if (!gameState.isGameOver && !gameState.isStartScreen) {
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                gameState.player.x = e.touches[0].clientX - rect.left - gameState.player.width / 2;
+                // 限制玩家在画布内
+                gameState.player.x = Math.max(0, Math.min(canvas.width - gameState.player.width, gameState.player.x));
+            }
+        });
+        
+        // 输入控制模块结束
+        
+        // 物品生成与物理更新
+        function spawnItem() {
+            const itemTypes = Object.keys(ITEM_TYPES);
+            const randomType = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+            const item = ITEM_TYPES[randomType];
+            
+            const newItem = {
+                type: randomType,
+                name: item.name,
+                itemType: item.type,
+                score: item.score,
+                color: item.color,
+                x: Math.random() * (canvas.width - 80),
+                y: 0,
+                width: 80,
+                height: 80,
+                speed: 0.75 + Math.random() * 0.5,
+                acceleration: 0.025,
+                scale: 0.8 + Math.random() * 0.4,
+                scaleDirection: 1
+            };
+            
+            gameState.items.push(newItem);
+        }
+        
+        function updateItems() {
+            for (let i = gameState.items.length - 1; i >= 0; i--) {
+                const item = gameState.items[i];
+                
+                // 更新位置
+                item.speed += item.acceleration;
+                item.y += item.speed;
+                
+                // 更新缩放动画
+                item.scale += 0.01 * item.scaleDirection;
+                if (item.scale > 1.2 || item.scale < 0.8) {
+                    item.scaleDirection *= -1;
+                }
+                
+                // 移除超出画布的物品
+                if (item.y > canvas.height) {
+                    gameState.items.splice(i, 1);
+                    // 漏接物品，重置连击
+                    if (item.itemType === 'blessing') {
+                        gameState.combo = 0;
+                    }
+                }
+            }
+        }
+        
+        // 物品生成与物理更新模块结束
+        
+        // 合成与连击逻辑
+        function checkCollisions() {
+            for (let i = gameState.items.length - 1; i >= 0; i--) {
+                const item = gameState.items[i];
+                
+                // 碰撞检测（AABB算法）
+                if (
+                    gameState.player.x < item.x + item.width &&
+                    gameState.player.x + gameState.player.width > item.x &&
+                    gameState.player.y < item.y + item.height &&
+                    gameState.player.y + gameState.player.height > item.y
+                ) {
+                    // 处理碰撞
+                    if (item.itemType === 'blessing') {
+                        // 接到福气物品
+                        handleBlessingItem(item);
+                    } else if (item.itemType === 'bad') {
+                        // 触碰到扫把或破碗时立即播放音效（必须在游戏结束逻辑之前）
+                        if (item.type === 'broom') {
+                            console.log('【调试】触碰到扫把，准备播放音效');
+                            playSound('gunziluodi');
+                            console.log('【调试】扫把音效播放命令已发送');
+                        } else if (item.type === 'brokenBowl') {
+                            console.log('【调试】触碰到破碗，准备播放音效');
+                            playSound('wansheng');
+                            console.log('【调试】破碗音效播放命令已发送');
+                        }
+                        
+                        // 接到霉运物品，游戏结束
+                        console.log('【调试】开始设置游戏结束状态');
+                        gameState.isGameOver = true;
+                        gameState.endReason = `接到了${item.name}，游戏结束`;
+                        showCursor();
+                        
+                        // 根据分数决定播放失败还是成功音效
+                        if (gameState.score < 1000) {
+                            console.log('【调试】分数<1000，播放失败音效');
+                            playSound('youxishibai');
+                            console.log('【调试】失败音效播放命令已发送');
+                        } else {
+                            console.log('【调试】分数>=1000，播放成功音效');
+                            playSound('youxishengli');
+                            console.log('【调试】成功音效播放命令已发送');
+                        }
+                        
+                        // 计算等级变化
+                        calculateRankChanges();
+                        // 开始等级动画
+                        startRankAnimations();
+                        // 保存游戏记录
+                        saveGameRecord();
+                    }
+                    
+                    // 移除物品
+                    gameState.items.splice(i, 1);
+                }
+            }
+        }
+        
+        function handleBlessingItem(item) {
+            // 播放收集物品音效
+            playCollectSound();
+            
+            // 增加分数（考虑连击倍率）
+            let scoreMultiplier = 1;
+            if (gameState.combo >= 10) {
+                scoreMultiplier = 2;
+            } else if (gameState.combo >= 5) {
+                scoreMultiplier = 1.5;
+            }
+            gameState.score += item.score * scoreMultiplier;
+            
+            // 增加连击数
+            gameState.combo++;
+            
+            // 增加收集物品计数
+            gameState.collectedItems[item.type]++;
+            
+            // 检查是否需要合成福卡
+            checkFucardSynthesis(item.type);
+            
+            // 检查是否集齐五福
+            checkFiveBlessings();
+        }
+        
+        function checkFucardSynthesis(itemType) {
+            if (gameState.collectedItems[itemType] >= 3) {
+                // 合成福卡
+                const fucard = FUCARDS[itemType];
+                if (!gameState.fucards.includes(fucard)) {
+                    gameState.fucards.push(fucard);
+                    // 增加福卡历史总数
+                    incrementCardTotal(fucard);
+                }
+                
+                // 清零计数
+                gameState.collectedItems[itemType] = 0;
+                
+                // 播放烟花音效
+                playFireworksSound();
+                
+                // 生成粒子效果
+                createParticleEffect(gameState.player.x + gameState.player.width / 2, gameState.player.y);
+            }
+        }
+        
+        function checkFiveBlessings() {
+            if (gameState.fucards.length >= 5) {
+                // 触发五福临门特效
+                gameState.score += 500;
+                // 播放烟花音效
+                playFireworksSound();
+                createFiveBlessingsEffect();
+                
+                // 清空福卡列表
+                gameState.fucards = [];
+            }
+        }
+        
+        function createParticleEffect(x, y) {
+            for (let i = 0; i < 20; i++) {
+                gameState.particleEffects.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1,
+                    size: 5 + Math.random() * 5,
+                    color: '#ffd700'
+                });
+            }
+        }
+        
+        function createFiveBlessingsEffect() {
+            for (let i = 0; i < 100; i++) {
+                gameState.particleEffects.push({
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    vx: (Math.random() - 0.5) * 20,
+                    vy: (Math.random() - 0.5) * 20,
+                    life: 1,
+                    size: 8 + Math.random() * 7,
+                    color: '#ffd700'
+                });
+            }
+        }
+        
+        function updateParticles() {
+            for (let i = gameState.particleEffects.length - 1; i >= 0; i--) {
+                const particle = gameState.particleEffects[i];
+                
+                // 更新位置
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+                
+                // 更新生命周期
+                particle.life -= 0.02;
+                
+                // 移除死亡粒子
+                if (particle.life <= 0) {
+                    gameState.particleEffects.splice(i, 1);
+                }
+            }
+        }
+        
+        // 合成与连击逻辑模块结束
+        
+        // Canvas渲染
+        function render() {
+            // 绘制背景图片，铺满整个屏幕
+            ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+            
+            if (gameState.isStartScreen) {
+                // 渲染开始页面
+                renderStartScreen();
+            } else if (gameState.isHistoryScreen) {
+                // 渲染历史记录页面
+                renderHistoryScreen();
+            } else {
+                // 渲染玩家（福字）
+                renderPlayer();
+                
+                // 渲染物品
+                renderItems();
+                
+                // 渲染UI
+                renderUI();
+                
+                // 渲染粒子效果
+                renderParticles();
+                
+                // 渲染游戏结束界面
+                if (gameState.isGameOver) {
+                    // 计算星级和标题
+                    let starLevel = 0;
+                    let title = "挑战失败";
+                    
+                    // 从高分到低分顺序判断
+                    if (gameState.score >= 3000) {
+                        starLevel = 3;
+                        title = "挑战成功";
+                    } else if (gameState.score >= 2000) {
+                        starLevel = 2;
+                        title = "挑战成功";
+                    } else if (gameState.score >= 1000) {
+                        starLevel = 1;
+                        title = "挑战成功";
+                    } else {
+                        starLevel = 0;
+                        title = "挑战失败";
+                    }
+                    
+                    // 添加调试信息
+                    console.log("结算分数:", gameState.score, "判定星级:", starLevel);
+                    
+                    // 渲染结算画面
+                    renderGameResult(title, starLevel);
+                }
+                
+                // 渲染新记录提示
+                if (gameState.showNewRecordText) {
+                    renderNewRecordText();
+                }
+            }
+        }
+        
+        function renderPlayer() {
+            ctx.save();
+            ctx.translate(gameState.player.x, gameState.player.y);
+            
+            // 绘制小马图片
+            ctx.drawImage(playerImage, 0, 0, gameState.player.width, gameState.player.height);
+            
+            ctx.restore();
+        }
+        
+        function renderItems() {
+            for (const item of gameState.items) {
+                ctx.save();
+                ctx.translate(item.x + item.width / 2, item.y + item.height / 2);
+                ctx.scale(item.scale, item.scale);
+                
+                // 绘制物品
+                if (itemImages[item.type]) {
+                    // 绘制物品图片
+                    ctx.drawImage(itemImages[item.type], -item.width / 2, -item.height / 2, item.width, item.height);
+                }
+                
+                ctx.restore();
+            }
+        }
+        
+        function renderUI() {
+            // 绘制第一行：左侧音乐图标和分数，右侧福卡图标组
+            renderTopFirstRow();
+            
+            // 绘制第二行：连击提示
+            renderTopSecondRow();
+            
+            // 绘制第三行：新记录提示（已在renderNewRecordText中处理）
+        }
+        
+        // 绘制顶部第一行
+        function renderTopFirstRow() {
+            console.log('游戏顶部UI绘制执行');
+            const padding = 20;
+            const scoreY = 30;
+            
+            // 左侧：分数
+            // 分数文字（带描边）
+            ctx.font = '30px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'left';
+            ctx.strokeStyle = '#FF6919';
+            ctx.lineWidth = 2;
+            ctx.strokeText(`分数: ${Math.floor(gameState.score)}`, padding, scoreY);
+            ctx.fillStyle = '#FCD84A';
+            ctx.fillText(`分数: ${Math.floor(gameState.score)}`, padding, scoreY);
+            
+            // 右侧：已合成福卡图标组
+            const cardWidth = 40;
+            const cardHeight = 40;
+            const cardSpacing = 10;
+            let rightOffset = canvas.width - padding;
+            
+            // 从右向左绘制福卡图标
+            for (let i = gameState.fucards.length - 1; i >= 0; i--) {
+                const fucardType = gameState.fucards[i];
+                if (fucardImages[fucardType]) {
+                    rightOffset -= cardWidth;
+                    ctx.drawImage(fucardImages[fucardType], rightOffset, scoreY - cardHeight / 2, cardWidth, cardHeight);
+                    rightOffset -= cardSpacing;
+                }
+            }
+        }
+        
+        // 绘制顶部第二行
+        function renderTopSecondRow() {
+            // 连击提示（带描边）
+            if (gameState.combo > 0) {
+                ctx.font = '32px Coca-ColaCareFontKaiTi';
+                ctx.textAlign = 'center';
+                ctx.strokeStyle = '#FF6919';
+                ctx.lineWidth = 2;
+                ctx.strokeText(`连击 x${gameState.combo}`, canvas.width / 2, 80);
+                ctx.fillStyle = '#FCD84A';
+                ctx.fillText(`连击 x${gameState.combo}`, canvas.width / 2, 80);
+            }
+        }
+        
+        // 修改新记录提示文字样式
+        function renderNewRecordText() {
+            // 绘制新记录提示（带描边）
+            ctx.font = '30px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.strokeStyle = '#FF6919';
+            ctx.lineWidth = 2;
+            ctx.strokeText('已刷新历史记录！', canvas.width / 2, 120);
+            ctx.fillStyle = '#FCD84A';
+            ctx.fillText('已刷新历史记录！', canvas.width / 2, 120);
+        }
+        
+        function renderParticles() {
+            for (const particle of gameState.particleEffects) {
+                ctx.save();
+                ctx.globalAlpha = particle.life;
+                ctx.fillStyle = particle.color;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+        
+        function renderStartScreen() {
+            // 绘制装饰元素 - 灯笼（已隐藏）
+            // drawLantern(canvas.width * 0.2, canvas.height * 0.3, 50);
+            // drawLantern(canvas.width * 0.8, canvas.height * 0.3, 50);
+            
+            // 绘制历史记录入口icon（右上角）
+            const historyIconSize = 50;
+            const historyIconX = canvas.width - historyIconSize - 20;
+            const historyIconY = 20;
+            
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+            ctx.beginPath();
+            ctx.arc(historyIconX + historyIconSize / 2, historyIconY + historyIconSize / 2, historyIconSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#c40000';
+            ctx.font = '24px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('历', historyIconX + historyIconSize / 2, historyIconY + historyIconSize / 2);
+            
+            // 绘制段位显示区域（左上角固定）
+            renderRankDisplay();
+            
+            // 绘制个人历史最高记录
+            const highScore = getHighScore();
+            ctx.fillStyle = '#ffd700';
+            ctx.font = '18px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.fillText(`个人历史最高记录: ${highScore}`, canvas.width / 2, canvas.height * 0.2);
+            
+            // 绘制主标题（使用预加载的图片）
+            const titleWidth = 300;
+            const titleHeight = 100;
+            ctx.drawImage(titleImage, canvas.width / 2 - titleWidth / 2, canvas.height * 0.3 - titleHeight / 2, titleWidth, titleHeight);
+            
+            // 绘制副标题
+            ctx.font = '24px Coca-ColaCareFontKaiTi';
+            ctx.fillText('接住好运，五福临门！', canvas.width / 2, canvas.height * 0.4);
+            
+            // 绘制开始按钮
+            const buttonWidth = 200;
+            const buttonHeight = 60;
+            const buttonX = canvas.width / 2 - buttonWidth / 2;
+            const buttonY = canvas.height * 0.6;
+            
+            // 呼吸动画效果
+            const time = Date.now() / 1000;
+            const scale = 1 + Math.sin(time * 2) * 0.05;
+            
+            ctx.save();
+            ctx.translate(canvas.width / 2, buttonY + buttonHeight / 2);
+            ctx.scale(scale, scale);
+            
+            // 绘制圆角矩形按钮
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            ctx.moveTo(-buttonWidth / 2 + BUTTON_RADIUS, -buttonHeight / 2);
+            ctx.lineTo(buttonWidth / 2 - BUTTON_RADIUS, -buttonHeight / 2);
+            ctx.quadraticCurveTo(buttonWidth / 2, -buttonHeight / 2, buttonWidth / 2, -buttonHeight / 2 + BUTTON_RADIUS);
+            ctx.lineTo(buttonWidth / 2, buttonHeight / 2 - BUTTON_RADIUS);
+            ctx.quadraticCurveTo(buttonWidth / 2, buttonHeight / 2, buttonWidth / 2 - BUTTON_RADIUS, buttonHeight / 2);
+            ctx.lineTo(-buttonWidth / 2 + BUTTON_RADIUS, buttonHeight / 2);
+            ctx.quadraticCurveTo(-buttonWidth / 2, buttonHeight / 2, -buttonWidth / 2, buttonHeight / 2 - BUTTON_RADIUS);
+            ctx.lineTo(-buttonWidth / 2, -buttonHeight / 2 + BUTTON_RADIUS);
+            ctx.quadraticCurveTo(-buttonWidth / 2, -buttonHeight / 2, -buttonWidth / 2 + BUTTON_RADIUS, -buttonHeight / 2);
+            ctx.fill();
+            ctx.fillStyle = '#c40000';
+            ctx.font = '24px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('开始游戏', 0, 0);
+            
+            ctx.restore();
+            
+            // 绘制小字提示（上移至按钮下方）
+            ctx.fillStyle = '#ffd700';
+            ctx.font = '16px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.fillText('左右滑动接福气，避开霉运哦～不要接破碗和扫把～', canvas.width / 2, buttonY + buttonHeight + 14);
+            
+            // 绘制首页底部福卡展示区
+            renderBottomFucardDisplay();
+        }
+        
+        function renderHistoryScreen() {
+            // 绘制半透明背景
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制历史记录标题
+            ctx.fillStyle = '#ffd700';
+            ctx.font = '48px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('历史记录', canvas.width / 2, 80);
+            
+            // 获取历史记录
+            const records = getGameRecords();
+            
+            // 绘制记录列表
+            ctx.font = '18px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'left';
+            
+            const startY = 150;
+            const lineHeight = 40;
+            const padding = 20;
+            
+            if (records.length === 0) {
+                ctx.fillText('暂无记录', canvas.width / 2 - 50, startY);
+            } else {
+                // 绘制表头
+                ctx.fillText('排名', padding, startY);
+                ctx.fillText('分数', padding + 100, startY);
+                ctx.fillText('福卡', padding + 200, startY);
+                ctx.fillText('星星', padding + 300, startY);
+                
+                // 绘制记录
+                records.sort((a, b) => b.score - a.score); // 按分数降序排序
+                
+                for (let i = 0; i < Math.min(records.length, 10); i++) {
+                    const record = records[i];
+                    const y = startY + (i + 1) * lineHeight;
+                    
+                    ctx.fillText(`${i + 1}`, padding, y);
+                    ctx.fillText(`${record.score}`, padding + 100, y);
+                    ctx.fillText(`${record.fucards}/5`, padding + 200, y);
+                    
+                    // 绘制星星
+                    for (let j = 0; j < 3; j++) {
+                        const starX = padding + 300 + j * 25;
+                        const starSize = 15;
+                        
+                        ctx.fillStyle = j < record.stars ? '#ffd700' : '#888888';
+                        ctx.beginPath();
+                        
+                        // 绘制五角星
+                        for (let k = 0; k < 5; k++) {
+                            const angle = Math.PI * 2 / 5 * k - Math.PI / 2;
+                            const radius = starSize / 2;
+                            const pointX = starX + Math.cos(angle) * radius;
+                            const pointY = y - starSize / 2 + Math.sin(angle) * radius;
+                            
+                            if (k === 0) {
+                                ctx.moveTo(pointX, pointY);
+                            } else {
+                                ctx.lineTo(pointX, pointY);
+                            }
+                        }
+                        
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                    
+                    ctx.fillStyle = '#ffd700';
+                }
+            }
+            
+            // 绘制返回按钮
+            const buttonWidth = 200;
+            const buttonHeight = 60;
+            const buttonX = canvas.width / 2 - buttonWidth / 2;
+            const buttonY = canvas.height - 100;
+            
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+            ctx.fillStyle = '#c40000';
+            ctx.font = '24px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('返回首页', buttonX + buttonWidth / 2, buttonY + buttonHeight / 2);
+        }
+        
+        function renderNewRecordText() {
+            // 绘制新记录提示
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.9)';
+            ctx.font = '30px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('恭喜，已刷新历史记录', canvas.width / 2, 50);
+        }
+        
+        // 绘制灯笼装饰
+        function drawLantern(x, y, size) {
+            ctx.save();
+            ctx.translate(x, y);
+            
+            // 灯笼主体
+            ctx.fillStyle = '#ff8800';
+            ctx.beginPath();
+            ctx.arc(0, 0, size, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 灯笼内部
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            ctx.arc(0, 0, size * 0.6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 灯笼穗子
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            ctx.moveTo(-size * 0.3, size);
+            ctx.lineTo(0, size * 1.5);
+            ctx.lineTo(size * 0.3, size);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        
+        // 绘制首页底部福卡展示区
+        function renderBottomFucardDisplay() {
+            const cardTotals = getCardTotals();
+            const cardTypes = ['wenfuka', 'caifuka', 'dengfuka', 'shifuka', 'qianfuka'];
+            const cardWidth = 50;
+            const cardHeight = 50;
+            const spacing = (canvas.width - cardTypes.length * cardWidth) / (cardTypes.length + 1);
+            const bottomPadding = canvas.height * 0.1;
+            const startY = canvas.height - bottomPadding - cardHeight;
+            
+            // 遍历绘制每个福卡
+            for (let i = 0; i < cardTypes.length; i++) {
+                const cardType = cardTypes[i];
+                const startX = spacing + i * (cardWidth + spacing);
+                
+                // 绘制福卡图标
+                if (fucardImages[cardType]) {
+                    ctx.drawImage(fucardImages[cardType], startX, startY, cardWidth, cardHeight);
+                }
+                
+                // 绘制角标
+                const count = cardTotals[cardType] || 0;
+                if (count > 0) {
+                    const badgeSize = 16;
+                    const badgeX = startX + cardWidth - badgeSize;
+                    const badgeY = startY;
+                    
+                    // 绘制角标背景
+                    ctx.fillStyle = '#FFE300';
+                    ctx.strokeStyle = '#FF5121';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(badgeX + badgeSize / 2, badgeY + badgeSize / 2, badgeSize / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    
+                    // 绘制角标数字
+                    ctx.fillStyle = '#FF5121';
+                    ctx.font = '10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(count, badgeX + badgeSize / 2, badgeY + badgeSize / 2);
+                }
+            }
+            
+            console.log('首页福卡角标数据加载完成:', cardTotals);
+        }
+        
+        function renderGameResult(title, starLevel) {
+            // 绘制半透明背景
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制标题文字
+            ctx.fillStyle = '#ffd700';
+            ctx.font = '48px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(title, canvas.width / 2, canvas.height / 2 - 200);
+            
+            // 绘制最终分数
+            ctx.font = '36px Coca-ColaCareFontKaiTi';
+            ctx.fillText(`最终分数: ${Math.floor(gameState.score)}`, canvas.width / 2, canvas.height / 2 - 140);
+            
+            // 绘制段位变化展示
+            renderRankChangesDisplay();
+            
+            // 绘制福卡收集进度
+            ctx.font = '24px Coca-ColaCareFontKaiTi';
+            ctx.fillText(`福卡收集: ${gameState.fucards.length}/5`, canvas.width / 2, canvas.height / 2 + 120);
+            
+            // 绘制结束原因
+            if (gameState.endReason) {
+                ctx.font = '20px Coca-ColaCareFontKaiTi';
+                ctx.fillText(gameState.endReason, canvas.width / 2, canvas.height / 2 + 160);
+            }
+            
+            // 绘制再玩一次按钮
+            const buttonWidth = 200;
+            const buttonHeight = 60;
+            const buttonX = canvas.width / 2 - buttonWidth - 20;
+            const buttonY = canvas.height / 2 + 200;
+            
+            // 绘制圆角矩形按钮
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            ctx.moveTo(buttonX + BUTTON_RADIUS, buttonY);
+            ctx.lineTo(buttonX + buttonWidth - BUTTON_RADIUS, buttonY);
+            ctx.quadraticCurveTo(buttonX + buttonWidth, buttonY, buttonX + buttonWidth, buttonY + BUTTON_RADIUS);
+            ctx.lineTo(buttonX + buttonWidth, buttonY + buttonHeight - BUTTON_RADIUS);
+            ctx.quadraticCurveTo(buttonX + buttonWidth, buttonY + buttonHeight, buttonX + buttonWidth - BUTTON_RADIUS, buttonY + buttonHeight);
+            ctx.lineTo(buttonX + BUTTON_RADIUS, buttonY + buttonHeight);
+            ctx.quadraticCurveTo(buttonX, buttonY + buttonHeight, buttonX, buttonY + buttonHeight - BUTTON_RADIUS);
+            ctx.lineTo(buttonX, buttonY + BUTTON_RADIUS);
+            ctx.quadraticCurveTo(buttonX, buttonY, buttonX + BUTTON_RADIUS, buttonY);
+            ctx.fill();
+            ctx.fillStyle = '#c40000';
+            ctx.font = '24px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('再玩一次', buttonX + buttonWidth / 2, buttonY + buttonHeight / 2);
+            
+            // 绘制返回开始页面按钮
+            const returnButtonX = canvas.width / 2 + 20;
+            
+            // 绘制圆角矩形按钮
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            ctx.moveTo(returnButtonX + BUTTON_RADIUS, buttonY);
+            ctx.lineTo(returnButtonX + buttonWidth - BUTTON_RADIUS, buttonY);
+            ctx.quadraticCurveTo(returnButtonX + buttonWidth, buttonY, returnButtonX + buttonWidth, buttonY + BUTTON_RADIUS);
+            ctx.lineTo(returnButtonX + buttonWidth, buttonY + buttonHeight - BUTTON_RADIUS);
+            ctx.quadraticCurveTo(returnButtonX + buttonWidth, buttonY + buttonHeight, returnButtonX + buttonWidth - BUTTON_RADIUS, buttonY + buttonHeight);
+            ctx.lineTo(returnButtonX + BUTTON_RADIUS, buttonY + buttonHeight);
+            ctx.quadraticCurveTo(returnButtonX, buttonY + buttonHeight, returnButtonX, buttonY + buttonHeight - BUTTON_RADIUS);
+            ctx.lineTo(returnButtonX, buttonY + BUTTON_RADIUS);
+            ctx.quadraticCurveTo(returnButtonX, buttonY, returnButtonX + BUTTON_RADIUS, buttonY);
+            ctx.fill();
+            ctx.fillStyle = '#c40000';
+            ctx.font = '24px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('返回开始', returnButtonX + buttonWidth / 2, buttonY + buttonHeight / 2);
+        }
+        
+        // 渲染段位变化展示
+        function renderRankChangesDisplay() {
+            const rankState = gameState.rankState;
+            const rankInfo = getCurrentRankInfo();
+            
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // 绘制当前等级展示区
+            // 隐藏"当前等级"文字标签
+            // ctx.fillStyle = '#ffd700';
+            // ctx.font = '24px Coca-ColaCareFontKaiTi';
+            // ctx.textAlign = 'center';
+            // ctx.fillText('当前等级', centerX, centerY - 60);
+            
+            // 绘制段位图标
+            const iconSize = 60;
+            const iconY = centerY - 80;
+            const rankIcon = getRankIconByRankInfo(rankInfo);
+            if (rankIcon) {
+                ctx.drawImage(rankIcon, centerX - iconSize / 2, iconY, iconSize, iconSize);
+            }
+            
+            // 绘制等级名称（带升级动画）
+            if (rankState.isPromoted && rankState.animationState.animationType === 'promote') {
+                // 升级动画：礼花绽放效果
+                renderPromotionAnimation(centerX, centerY - 20, getDisplayRankName(rankInfo.fullName));
+            } else {
+                ctx.font = '28px Coca-ColaCareFontKaiTi';
+                ctx.fillText(getDisplayRankName(rankInfo.fullName), centerX, centerY - 20);
+            }
+            
+            // 绘制星星（带动画）
+            if (rankInfo.isAdvanced) {
+                // 高级段位：仅1颗星图标 + 星数文字
+                ctx.font = '32px Arial';
+                ctx.fillText('★', centerX - 30, centerY + 30);
+                ctx.font = '24px Coca-ColaCareFontKaiTi';
+                ctx.fillText(`${rankInfo.stars}`, centerX + 30, centerY + 30);
+            } else {
+                // 基础段位：平铺显示全部6颗星
+                const starSize = 25;
+                const starSpacing = 30;
+                const startX = centerX - (6 * starSpacing) / 2 + starSpacing / 2;
+                
+                for (let i = 0; i < 6; i++) {
+                    const starX = startX + i * starSpacing;
+                    const starY = centerY + 30;
+                    
+                    // 检查是否需要动画
+                    if (rankState.animationState.isAnimating) {
+                        if (rankState.animationState.animationType === 'add') {
+                            // 加星动画
+                            renderAddStarAnimation(i, starX, starY, starSize);
+                        } else if (rankState.animationState.animationType === 'remove') {
+                            // 掉星动画
+                            renderRemoveStarAnimation(i, starX, starY, starSize);
+                        } else {
+                            // 无动画，正常显示
+                            renderStar(i, starX, starY, starSize, rankInfo.stars);
+                        }
+                    } else {
+                        // 无动画，正常显示
+                        renderStar(i, starX, starY, starSize, rankInfo.stars);
+                    }
+                }
+            }
+            
+            // 绘制升级提示区（仅触发时显示）
+            if (rankState.isPromoted) {
+                renderPromotionNotification(rankInfo.fullName);
+            }
+            
+            // 绘制掉星提示区（仅触发时显示）
+            if (rankState.isDemoted) {
+                ctx.fillStyle = '#ff4444';
+                ctx.font = '24px Coca-ColaCareFontKaiTi';
+                ctx.textAlign = 'center';
+                ctx.fillText('⚠️ 段位变动：降至【' + getDisplayRankName(rankInfo.fullName) + '】', centerX, centerY + 80);
+            }
+            
+            // 更新动画状态
+            updateRankAnimation();
+        }
+        
+        // 渲染星星
+        function renderStar(index, x, y, size, currentStars) {
+            // 已点亮=金色#FFD700，未点亮=浅灰#CCCCCC
+            ctx.fillStyle = index < currentStars ? '#FFD700' : '#CCCCCC';
+            ctx.beginPath();
+            
+            // 绘制五角星
+            for (let j = 0; j < 5; j++) {
+                const angle = Math.PI * 2 / 5 * j - Math.PI / 2;
+                const radius = size / 2;
+                const pointX = x + Math.cos(angle) * radius;
+                const pointY = y + Math.sin(angle) * radius;
+                
+                if (j === 0) {
+                    ctx.moveTo(pointX, pointY);
+                } else {
+                    ctx.lineTo(pointX, pointY);
+                }
+            }
+            
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        // 渲染加星动画
+        function renderAddStarAnimation(index, x, y, size) {
+            const animState = gameState.rankState.animationState;
+            const elapsed = Date.now() - animState.animationStartTime;
+            const starIndex = animState.currentStar;
+            
+            if (index < starIndex) {
+                // 已完成动画的星星
+                ctx.fillStyle = '#FFD700';
+                renderStarShape(x, y, size);
+            } else if (index === starIndex) {
+                // 当前正在动画的星星
+                const progress = Math.min((elapsed % 200) / 200, 1);
+                const scale = 1 + Math.sin(progress * Math.PI) * 0.5;
+                
+                // 缩放脉冲效果
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                
+                // 金色光晕
+                ctx.shadowColor = '#FFD700';
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = '#FFD700';
+                renderStarShape(0, 0, size);
+                
+                ctx.restore();
+            } else {
+                // 未开始动画的星星
+                ctx.fillStyle = '#CCCCCC';
+                renderStarShape(x, y, size);
+            }
+        }
+        
+        // 渲染掉星动画
+        function renderRemoveStarAnimation(index, x, y, size) {
+            const animState = gameState.rankState.animationState;
+            const elapsed = Date.now() - animState.animationStartTime;
+            const starIndex = animState.currentStar;
+            
+            if (index === starIndex) {
+                // 当前正在动画的星星
+                const progress = Math.min(elapsed / 300, 1);
+                const scale = 1 - progress * 0.8;
+                const grayScale = 1 - progress;
+                
+                // 抖动效果
+                const shakeX = Math.sin(progress * 10) * 5;
+                const shakeY = Math.cos(progress * 10) * 5;
+                
+                ctx.save();
+                ctx.translate(x + shakeX, y + shakeY);
+                ctx.scale(scale, scale);
+                
+                // 灰化效果
+                ctx.fillStyle = `rgba(204, 204, 204, ${grayScale})`;
+                renderStarShape(0, 0, size);
+                
+                ctx.restore();
+            } else {
+                // 其他星星正常显示
+                const currentStars = gameState.rankState.stars;
+                ctx.fillStyle = index < currentStars ? '#FFD700' : '#CCCCCC';
+                renderStarShape(x, y, size);
+            }
+        }
+        
+        // 渲染升级动画
+        function renderPromotionAnimation(x, y, rankName) {
+            const animState = gameState.rankState.animationState;
+            const elapsed = Date.now() - animState.animationStartTime;
+            const progress = Math.min(elapsed / 1000, 1);
+            
+            // 礼花绽放效果
+            if (progress < 0.5) {
+                // 缩放动画
+                const scale = 1 + progress * 0.5;
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                ctx.font = '28px Coca-ColaCareFontKaiTi';
+                ctx.fillText(rankName, 0, 0);
+                ctx.restore();
+            } else {
+                // 正常显示
+                ctx.font = '28px Coca-ColaCareFontKaiTi';
+                ctx.fillText(rankName, x, y);
+            }
+            
+            // 播放升级音效
+            if (progress < 0.1) {
+                playPromotionSound();
+            }
+        }
+        
+        // 渲染星星形状
+        function renderStarShape(x, y, size) {
+            ctx.beginPath();
+            for (let j = 0; j < 5; j++) {
+                const angle = Math.PI * 2 / 5 * j - Math.PI / 2;
+                const radius = size / 2;
+                const pointX = x + Math.cos(angle) * radius;
+                const pointY = y + Math.sin(angle) * radius;
+                
+                if (j === 0) {
+                    ctx.moveTo(pointX, pointY);
+                } else {
+                    ctx.lineTo(pointX, pointY);
+                }
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        // 更新动画状态
+        function updateRankAnimation() {
+            const rankState = gameState.rankState;
+            const animState = rankState.animationState;
+            
+            if (!animState.isAnimating) {
+                return;
+            }
+            
+            const elapsed = Date.now() - animState.animationStartTime;
+            
+            if (animState.animationType === 'add') {
+                // 加星动画：每0.2秒点亮一颗星
+                const starsEarned = rankState.starsEarned;
+                const starInterval = 200;
+                
+                if (elapsed > animState.currentStar * starInterval && animState.currentStar < starsEarned) {
+                    animState.currentStar++;
+                }
+                
+                if (animState.currentStar >= starsEarned) {
+                    // 动画完成
+                    animState.isAnimating = false;
+                }
+            } else if (animState.animationType === 'remove') {
+                // 掉星动画：每颗星动画持续0.3秒
+                const starsLost = rankState.starsLost;
+                const starInterval = 300;
+                
+                if (elapsed > animState.currentStar * starInterval && animState.currentStar < starsLost) {
+                    animState.currentStar++;
+                }
+                
+                if (animState.currentStar >= starsLost) {
+                    // 动画完成
+                    animState.isAnimating = false;
+                }
+            } else if (animState.animationType === 'promote') {
+                // 升级动画：持续1秒
+                if (elapsed > 1000) {
+                    animState.isAnimating = false;
+                }
+            }
+        }
+        
+        // 开始等级动画
+        function startRankAnimations() {
+            const rankState = gameState.rankState;
+            const animState = rankState.animationState;
+            
+            // 重置动画状态
+            animState.isAnimating = true;
+            animState.animationStartTime = Date.now() + 500; // 延迟0.5秒开始，避免与分数动画冲突
+            animState.currentStar = 0;
+            
+            // 根据状态选择动画类型
+            if (rankState.isPromoted) {
+                animState.animationType = 'promote';
+            } else if (rankState.starsEarned > 0) {
+                animState.animationType = 'add';
+            } else if (rankState.starsLost > 0) {
+                animState.animationType = 'remove';
+            } else {
+                animState.isAnimating = false;
+            }
+        }
+        
+        // 晋升提示特效（精简版：仅保留粒子飘散特效）
+        function renderPromotionNotification(rankName) {
+            const centerX = canvas.width / 2;
+            const targetY = 80; // 页面顶部安全区内，“挑战成功”标题正上方约20px
+            
+            // 动画状态管理
+            if (!gameState.promotionAnimation) {
+                gameState.promotionAnimation = {
+                    startTime: Date.now(),
+                    particles: [],
+                    particleStartTime: Date.now()
+                };
+                
+                // 生成粒子
+                generatePromotionParticles(centerX, targetY - 10);
+            }
+            
+            const anim = gameState.promotionAnimation;
+            
+            // 更新粒子
+            updatePromotionParticles();
+            
+            // 绘制粒子
+            renderPromotionParticles();
+            
+            // 6秒后自动清理动画状态
+            if (Date.now() - anim.startTime > 6000) {
+                gameState.promotionAnimation = null;
+            }
+        }
+        
+        // 文本自动折行函数
+        function wrapText(text, maxWidth) {
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = words[0];
+            
+            for (let i = 1; i < words.length; i++) {
+                const testLine = currentLine + ' ' + words[i];
+                const metrics = ctx.measureText(testLine);
+                const testWidth = metrics.width;
+                
+                if (testWidth <= maxWidth) {
+                    currentLine = testLine;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = words[i];
+                }
+            }
+            lines.push(currentLine);
+            
+            // 如果单行仍然超过宽度，按字符分割
+            const finalLines = [];
+            for (const line of lines) {
+                if (ctx.measureText(line).width <= maxWidth) {
+                    finalLines.push(line);
+                } else {
+                    // 按字符分割
+                    let charLine = '';
+                    for (const char of line) {
+                        const testLine = charLine + char;
+                        if (ctx.measureText(testLine).width <= maxWidth) {
+                            charLine = testLine;
+                        } else {
+                            finalLines.push(charLine);
+                            charLine = char;
+                        }
+                    }
+                    if (charLine) {
+                        finalLines.push(charLine);
+                    }
+                }
+            }
+            
+            return finalLines;
+        }
+        
+        // 生成春节主题粒子
+        function generatePromotionParticles(x, y) {
+            if (!gameState.promotionAnimation) return;
+            
+            const anim = gameState.promotionAnimation;
+            anim.particles = [];
+            
+            // 生成≤15个粒子
+            const particleCount = Math.min(15, Math.floor(Math.random() * 5) + 10);
+            
+            for (let i = 0; i < particleCount; i++) {
+                const particle = {
+                    x: x + (Math.random() - 0.5) * 100,
+                    y: y,
+                    size: 3 + Math.random() * 3, // 3-6px随机
+                    speed: 0.8 + Math.random() * 0.7, // 0.8-1.5px/帧
+                    angle: -Math.PI / 2 + (Math.random() - 0.5) * Math.PI / 3, // 向上抛物线轨迹
+                    opacity: 1,
+                    type: Math.random() > 0.3 ? 'star' : 'fu', // 70%金色星尘，30%福字轮廓
+                    life: 0,
+                    maxLife: 1200 + Math.random() * 300 // 1.2-1.5秒
+                };
+                anim.particles.push(particle);
+            }
+        }
+        
+        // 更新粒子
+        function updatePromotionParticles() {
+            if (!gameState.promotionAnimation) return;
+            
+            const anim = gameState.promotionAnimation;
+            const particles = anim.particles;
+            
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                
+                // 更新位置（轻盈抛物线轨迹）
+                p.x += Math.cos(p.angle) * p.speed;
+                p.y += Math.sin(p.angle) * p.speed + 0.1; // 轻微重力
+                
+                // 更新生命周期
+                p.life += 16; // 假设60fps，每帧约16ms
+                
+                // 1.2秒后透明度渐隐
+                if (p.life > 1200) {
+                    p.opacity = Math.max(0, 1 - (p.life - 1200) / 300);
+                }
+                
+                // 移除死亡粒子
+                if (p.life > p.maxLife) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+        
+        // 渲染粒子
+        function renderPromotionParticles() {
+            if (!gameState.promotionAnimation) return;
+            
+            const particles = gameState.promotionAnimation.particles;
+            
+            for (const p of particles) {
+                ctx.save();
+                ctx.globalAlpha = p.opacity * (p.type === 'fu' ? 0.3 : 1);
+                
+                if (p.type === 'star') {
+                    // 金色星尘（#FFD700）
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // 金光涟漪扩散效果
+                    ctx.globalAlpha = p.opacity * 0.2;
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size / 2 + 5, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // 微小“福”字轮廓粒子
+                    ctx.fillStyle = '#FFD700';
+                    ctx.font = p.size + 'px Coca-ColaCareFontKaiTi';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('福', p.x, p.y);
+                }
+                
+                ctx.restore();
+            }
+        }
+        
+        // 重置晋升动画（用户点击按钮时调用）
+        function resetPromotionAnimation() {
+            gameState.promotionAnimation = null;
+        }
+        
+        // 播放升级音效
+        function playPromotionSound() {
+            // 尝试播放简单的音效
+            try {
+                // 创建音频上下文
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                // 设置音效参数
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.3);
+                
+                gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                
+                // 播放音效
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.3);
+            } catch (e) {
+                // 音效播放失败，忽略错误
+                console.log('音效播放失败:', e);
+            }
+        }
+        
+        function renderVictory() {
+            // 绘制半透明背景
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 计算星级和标题
+            let starLevel = 0;
+            let title = "挑战失败";
+            
+            // 从高分到低分顺序判断
+            if (gameState.score >= 3000) {
+                starLevel = 3;
+                title = "挑战成功";
+            } else if (gameState.score >= 2000) {
+                starLevel = 2;
+                title = "挑战成功";
+            } else if (gameState.score >= 1000) {
+                starLevel = 1;
+                title = "挑战成功";
+            } else {
+                starLevel = 0;
+                title = "挑战失败";
+            }
+            
+            // 绘制标题文字
+            ctx.fillStyle = '#ffd700';
+            ctx.font = '48px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(title, canvas.width / 2, canvas.height / 2 - 200);
+            
+            // 绘制最终分数
+            ctx.font = '36px Coca-ColaCareFontKaiTi';
+            ctx.fillText(`最终分数: ${Math.floor(gameState.score)}`, canvas.width / 2, canvas.height / 2 - 140);
+            
+            // 绘制段位变化展示
+            renderRankChangesDisplay();
+            
+            // 绘制福卡收集进度
+            ctx.font = '24px Coca-ColaCareFontKaiTi';
+            ctx.fillText(`福卡收集: ${gameState.fucards.length}/5`, canvas.width / 2, canvas.height / 2 + 120);
+            
+            // 绘制结束原因
+            if (gameState.endReason) {
+                ctx.font = '20px Coca-ColaCareFontKaiTi';
+                ctx.fillText(gameState.endReason, canvas.width / 2, canvas.height / 2 + 160);
+            }
+            
+            // 绘制再玩一次按钮
+            const buttonWidth = 200;
+            const buttonHeight = 60;
+            const buttonX = canvas.width / 2 - buttonWidth - 20;
+            const buttonY = canvas.height / 2 + 200;
+            
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+            ctx.fillStyle = '#c40000';
+            ctx.font = '24px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('再玩一次', buttonX + buttonWidth / 2, buttonY + buttonHeight / 2);
+            
+            // 绘制返回开始页面按钮
+            const returnButtonX = canvas.width / 2 + 20;
+            
+            ctx.fillStyle = '#ffd700';
+            ctx.fillRect(returnButtonX, buttonY, buttonWidth, buttonHeight);
+            ctx.fillStyle = '#c40000';
+            ctx.font = '24px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('返回开始', returnButtonX + buttonWidth / 2, buttonY + buttonHeight / 2);
+        }
+        
+        // 绘制星星评分
+        function drawStars(starLevel, x, y) {
+            const starSize = 30;
+            const starSpacing = 40;
+            
+            for (let i = 0; i < 3; i++) {
+                const starX = x - starSpacing + i * starSpacing;
+                
+                // 绘制星星
+                ctx.fillStyle = i < starLevel ? '#FFD700' : '#CCCCCC';
+                ctx.beginPath();
+                
+                // 绘制五角星
+                for (let j = 0; j < 5; j++) {
+                    const angle = Math.PI * 2 / 5 * j - Math.PI / 2;
+                    const radius = starSize / 2;
+                    const pointX = starX + Math.cos(angle) * radius;
+                    const pointY = y + Math.sin(angle) * radius;
+                    
+                    if (j === 0) {
+                        ctx.moveTo(pointX, pointY);
+                    } else {
+                        ctx.lineTo(pointX, pointY);
+                    }
+                }
+                
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+        
+        // Canvas渲染模块结束
+        
+        // 事件监听 - 游戏交互
+        canvas.addEventListener('click', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // 优先处理游戏结束状态的点击
+            if (gameState.isGameOver) {
+                // 检测按钮点击
+                const buttonWidth = 200;
+                const buttonHeight = 60;
+                const buttonY = canvas.height / 2 + 200;
+                
+                // 再玩一次按钮
+                const replayButtonX = canvas.width / 2 - buttonWidth - 20;
+                if (
+                    x >= replayButtonX &&
+                    x <= replayButtonX + buttonWidth &&
+                    y >= buttonY &&
+                    y <= buttonY + buttonHeight
+                ) {
+                    // 播放点击音效
+                    playClickSound();
+                    
+                    // 重置游戏状态
+                    gameState.isGameOver = false;
+                    gameState.score = 0;
+                    gameState.combo = 0;
+                    gameState.endReason = '';
+                    gameState.items = [];
+                    gameState.collectedItems = {
+                        redPacket: 0,
+                        dumpling: 0,
+                        lantern: 0,
+                        couplet: 0,
+                        luckyMoney: 0
+                    };
+                    gameState.fucards = [];
+                    gameState.particleEffects = [];
+                    gameState.lastItemTime = 0;
+                    gameState.showNewRecordText = false;
+                    // 重置等级动画状态
+                    gameState.rankState.animationState.isAnimating = false;
+                    gameState.rankState.animationState.currentStar = 0;
+                    gameState.rankState.animationState.animationType = '';
+                    // 重置晋升动画
+                    resetPromotionAnimation();
+                    
+                    // 隐藏鼠标指针
+                    hideCursor();
+                    return;
+                }
+                
+                // 返回开始页面按钮
+                const returnButtonX = canvas.width / 2 + 20;
+                if (
+                    x >= returnButtonX &&
+                    x <= returnButtonX + buttonWidth &&
+                    y >= buttonY &&
+                    y <= buttonY + buttonHeight
+                ) {
+                    // 播放点击音效
+                    playClickSound();
+                    
+                    // 回到开始页面
+                    gameState.isStartScreen = true;
+                    gameState.isGameOver = false;
+                    // 重置等级动画状态
+                    gameState.rankState.animationState.isAnimating = false;
+                    gameState.rankState.animationState.currentStar = 0;
+                    gameState.rankState.animationState.animationType = '';
+                    // 重置晋升动画
+                    resetPromotionAnimation();
+                    
+                    // 显示鼠标指针
+                    showCursor();
+                    return;
+                }
+            } else if (gameState.isStartScreen) {
+                // 检测历史记录入口点击
+                const historyIconSize = 50;
+                const historyIconX = canvas.width - historyIconSize - 20;
+                const historyIconY = 20;
+                
+                if (
+                    x >= historyIconX &&
+                    x <= historyIconX + historyIconSize &&
+                    y >= historyIconY &&
+                    y <= historyIconY + historyIconSize
+                ) {
+                    // 进入历史记录页面
+                    gameState.isHistoryScreen = true;
+                    gameState.isStartScreen = false;
+                    return;
+                } else {
+                    // 点击开始游戏
+                    // 播放点击音效
+                    playClickSound();
+                    
+                    // 尝试播放背景音乐（如果被浏览器拦截）
+                    backgroundMusic.play().catch(error => {
+                        console.log('音乐播放需要用户交互:', error);
+                    });
+                    
+                    gameState.isStartScreen = false;
+                    gameState.isGameOver = false;
+                    
+                    // 重置游戏状态
+                    gameState.score = 0;
+                    gameState.combo = 0;
+                    gameState.endReason = '';
+                    gameState.items = [];
+                    gameState.collectedItems = {
+                        redPacket: 0,
+                        dumpling: 0,
+                        lantern: 0,
+                        couplet: 0,
+                        luckyMoney: 0
+                    };
+                    gameState.fucards = [];
+                    gameState.particleEffects = [];
+                    gameState.lastItemTime = 0;
+                    gameState.showNewRecordText = false;
+                    
+                    // 隐藏鼠标指针
+                    hideCursor();
+                    return;
+                }
+            } else if (gameState.isHistoryScreen) {
+                // 检测返回按钮点击
+                const buttonWidth = 200;
+                const buttonHeight = 60;
+                const buttonX = canvas.width / 2 - buttonWidth / 2;
+                const buttonY = canvas.height - 100;
+                
+                if (
+                    x >= buttonX &&
+                    x <= buttonX + buttonWidth &&
+                    y >= buttonY &&
+                    y <= buttonY + buttonHeight
+                ) {
+                    // 返回首页
+                    gameState.isHistoryScreen = false;
+                    gameState.isStartScreen = true;
+                    return;
+                }
+            }
+        });
+        
+        // 等级系统核心逻辑
+        function calculateRankChanges() {
+            const rankState = gameState.rankState;
+            const score = gameState.score;
+            
+            // 重置状态
+            rankState.isPromoted = false;
+            rankState.isDemoted = false;
+            rankState.starsEarned = 0;
+            rankState.starsLost = 0;
+            
+            if (score >= 1000) {
+                // 挑战成功，计算获得星星数
+                let earnedStars = 0;
+                if (score >= 3000) {
+                    earnedStars = 3;
+                } else if (score >= 2000) {
+                    earnedStars = 2;
+                } else {
+                    earnedStars = 1;
+                }
+                rankState.starsEarned = earnedStars;
+                
+                // 应用升级逻辑
+                applyRankUpgrade(earnedStars);
+            } else {
+                // 挑战失败，计算掉星
+                applyRankDemotion();
+            }
+        }
+        
+        function applyRankUpgrade(earnedStars) {
+            const rankState = gameState.rankState;
+            let currentRankIndex = rankState.rankIndex;
+            let currentSegmentIndex = rankState.segmentIndex;
+            let currentStars = rankState.stars;
+            
+            // 计算新的星星数
+            currentStars += earnedStars;
+            
+            // 检查是否需要晋升
+            while (true) {
+                const rankConfig = RANK_SYSTEM.getRankConfig(currentRankIndex);
+                
+                // 高级段位（荣耀王者/传奇王者）：无上限，只累加星数
+                if (RANK_SYSTEM.isAdvancedRank(currentRankIndex)) {
+                    break;
+                }
+                
+                // 基础段位：检查是否满星
+                const maxStars = rankConfig.starsPerSegment;
+                if (currentStars >= maxStars) {
+                    // 晋升
+                    rankState.isPromoted = true;
+                    
+                    // 计算溢出星数
+                    const overflowStars = currentStars - maxStars;
+                    
+                    // 进入下一个小段位或大段位
+                    currentSegmentIndex++;
+                    
+                    // 检查是否需要晋升大段位
+                    if (currentSegmentIndex >= rankConfig.segments) {
+                        // 晋升大段位
+                        currentRankIndex++;
+                        currentSegmentIndex = 0;
+                        
+                        // 检查是否到达最高大段位
+                        if (currentRankIndex >= RANK_SYSTEM.totalRanks()) {
+                            currentRankIndex = RANK_SYSTEM.totalRanks() - 1;
+                            currentSegmentIndex = 0;
+                            currentStars = overflowStars;
+                            break;
+                        }
+                    }
+                    
+                    // 设置新的星星数（溢出星数）
+                    currentStars = overflowStars;
+                } else {
+                    // 未达到满星，结束循环
+                    break;
+                }
+            }
+            
+            // 更新状态
+            rankState.rankIndex = currentRankIndex;
+            rankState.segmentIndex = currentSegmentIndex;
+            rankState.stars = currentStars;
+        }
+        
+        function applyRankDemotion() {
+            const rankState = gameState.rankState;
+            let currentRankIndex = rankState.rankIndex;
+            let currentSegmentIndex = rankState.segmentIndex;
+            let currentStars = rankState.stars;
+            
+            // 高级段位（荣耀王者/传奇王者）：只减星数，不掉段
+            if (RANK_SYSTEM.isAdvancedRank(currentRankIndex)) {
+                if (currentStars > 0) {
+                    currentStars--;
+                    rankState.starsLost = 1;
+                }
+            } else {
+                // 基础段位
+                if (currentStars > 0) {
+                    // 扣1星
+                    currentStars--;
+                    rankState.starsLost = 1;
+                } else {
+                    // 当前星数为0，需要掉段
+                    // 检查是否为最低段位（倔强青铜1段0星）
+                    if (currentRankIndex === 0 && currentSegmentIndex === 0 && currentStars === 0) {
+                        // 保底规则：不掉段
+                        return;
+                    }
+                    
+                    // 掉至上一段位的最后一段
+                    currentRankIndex--;
+                    
+                    // 检查是否已到最低段位
+                    if (currentRankIndex < 0) {
+                        currentRankIndex = 0;
+                        currentSegmentIndex = 0;
+                        currentStars = 0;
+                    } else {
+                        // 掉至上一段位的最后一段，星数为该段位满星数-1
+                        const rankConfig = RANK_SYSTEM.getRankConfig(currentRankIndex);
+                        currentSegmentIndex = rankConfig.segments - 1;
+                        currentStars = rankConfig.starsPerSegment - 1;
+                        rankState.isDemoted = true;
+                    }
+                }
+            }
+            
+            // 更新状态
+            rankState.rankIndex = currentRankIndex;
+            rankState.segmentIndex = currentSegmentIndex;
+            rankState.stars = currentStars;
+        }
+        
+        function getCurrentRankInfo() {
+            const rankState = gameState.rankState;
+            const rankConfig = RANK_SYSTEM.getRankConfig(rankState.rankIndex);
+            
+            if (RANK_SYSTEM.isAdvancedRank(rankState.rankIndex)) {
+                // 高级段位
+                return {
+                    name: rankConfig.name,
+                    title: rankConfig.title,
+                    fullName: `${rankConfig.name}·${rankConfig.title}`,
+                    stars: rankState.stars,
+                    isAdvanced: true
+                };
+            } else {
+                // 基础段位
+                return {
+                    name: rankConfig.name,
+                    title: rankConfig.title,
+                    fullName: `${rankConfig.name}·${rankConfig.title}${rankState.segmentIndex + 1}段`,
+                    stars: rankState.stars,
+                    maxStars: rankConfig.starsPerSegment,
+                    segment: rankState.segmentIndex + 1,
+                    isAdvanced: false
+                };
+            }
+        }
+        
+        function getPromotionText() {
+            const rankState = gameState.rankState;
+            const rankConfig = RANK_SYSTEM.getRankConfig(rankState.rankIndex);
+            
+            if (RANK_SYSTEM.isAdvancedRank(rankState.rankIndex)) {
+                return '';
+            }
+            
+            const starsNeeded = rankConfig.starsPerSegment - rankState.stars;
+            if (starsNeeded > 0) {
+                // 计算下一段位
+                let nextRankIndex = rankState.rankIndex;
+                let nextSegmentIndex = rankState.segmentIndex + 1;
+                
+                if (nextSegmentIndex >= rankConfig.segments) {
+                    nextRankIndex++;
+                    nextSegmentIndex = 0;
+                }
+                
+                const nextRankConfig = RANK_SYSTEM.getRankConfig(nextRankIndex);
+                const nextRankName = nextRankConfig.name;
+                const nextRankTitle = nextRankConfig.title;
+                
+                if (nextSegmentIndex === 0) {
+                    return `再接${starsNeeded}颗星即可晋升${nextRankName}·${nextRankTitle}！`;
+                } else {
+                    return `再接${starsNeeded}颗星即可晋升${nextRankTitle}${nextSegmentIndex + 1}段！`;
+                }
+            }
+            return '';
+        }
+        
+        // 游戏记录相关函数
+        function saveGameRecord() {
+            // 计算星星数量
+            const starCount = Math.min(Math.floor(gameState.score / 1000), 3);
+            
+            // 创建记录对象
+            const record = {
+                score: Math.floor(gameState.score),
+                fucards: gameState.fucards.length,
+                stars: starCount,
+                timestamp: new Date().getTime()
+            };
+            
+            // 获取现有记录
+            let records = JSON.parse(localStorage.getItem('fujigame_records') || '[]');
+            
+            // 添加新记录
+            records.push(record);
+            
+            // 只保留最近20条记录
+            if (records.length > 20) {
+                records = records.slice(-20);
+            }
+            
+            // 保存记录
+            localStorage.setItem('fujigame_records', JSON.stringify(records));
+            
+            // 更新最高分数
+            updateHighScore(gameState.score);
+            
+            // 保存等级状态
+            saveRankState();
+        }
+        
+        // 保存等级状态
+        function saveRankState() {
+            localStorage.setItem('fujigame_rankState', JSON.stringify(gameState.rankState));
+        }
+        
+        // 加载等级状态
+        function loadRankState() {
+            const savedState = localStorage.getItem('fujigame_rankState');
+            if (savedState) {
+                gameState.rankState = JSON.parse(savedState);
+            }
+        }
+        
+        // 初始化等级状态
+        loadRankState();
+        
+        // 根据段位信息获取对应的图标
+        function getRankIconByRankInfo(rankInfo) {
+            const title = rankInfo.title;
+            
+            if (title.includes('纳福萌新')) {
+                return rankIcons.nafumengxin;
+            } else if (title.includes('聚福好手')) {
+                return rankIcons.nafuhaoshou;
+            } else if (title.includes('迎福高手')) {
+                return rankIcons.nafugaoshou;
+            } else if (title.includes('集福大师')) {
+                return rankIcons.fuqidashi;
+            } else if (title.includes('臻福宗师')) {
+                return rankIcons.zhenfuzongshi;
+            } else if (title.includes('耀福王者')) {
+                return rankIcons.yaofuangzhe;
+            } else if (title.includes('万福王者')) {
+                return rankIcons.wanfuwangzhe;
+            } else if (title.includes('福耀王者')) {
+                return rankIcons.rongyaowangzhe;
+            } else if (title.includes('福御王者')) {
+                return rankIcons.chuanqiwangzhe;
+            } else {
+                return null;
+            }
+        }
+        
+        // 将段位名称替换为精简版（仅保留后半段称谓）
+        function getDisplayRankName(internalName) {
+            // 分割段位名称，保留后半段
+            const parts = internalName.split('·');
+            if (parts.length === 2) {
+                return parts[1];
+            }
+            return internalName;
+        }
+        
+        // 渲染段位显示
+        function renderRankDisplay() {
+            const rankInfo = getCurrentRankInfo();
+            const promotionText = getPromotionText();
+            
+            // 位置：居中对齐（参考结算页面布局）
+            const centerX = canvas.width / 2;
+            const y = 40;
+            const padding = 20;
+            
+            // 绘制等级图标（替换为段位图标）
+            const iconSize = 40;
+            const iconX = centerX - 150;
+            const iconY = y;
+            
+            const rankIcon = getRankIconByRankInfo(rankInfo);
+            if (rankIcon) {
+                ctx.drawImage(rankIcon, iconX, iconY, iconSize, iconSize);
+            } else {
+                //  fallback：显示星星图标
+                ctx.fillStyle = '#ffd700';
+                ctx.font = '32px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('★', iconX, iconY + iconSize / 2);
+            }
+            
+            // 绘制等级名称和星数
+            const textX = centerX;
+            const textY = y;
+            
+            ctx.fillStyle = '#ffd700';
+            ctx.font = '20px Coca-ColaCareFontKaiTi';
+            ctx.textAlign = 'center';
+            ctx.fillText(getDisplayRankName(rankInfo.fullName), textX, textY + 15);
+            
+            // 绘制星数进度（替换为星星图标阵列）
+            if (rankInfo.isAdvanced) {
+                // 高级段位：显示星数
+                ctx.fillStyle = '#ffd700';
+                ctx.font = '16px Coca-ColaCareFontKaiTi';
+                ctx.textAlign = 'center';
+                ctx.fillText(`★ ${rankInfo.stars}`, textX, textY + 45);
+            } else {
+                // 基础段位：显示6颗星星图标阵列
+                const starSize = 15;
+                const starSpacing = 20;
+                const startX = textX - (6 * starSpacing) / 2 + starSpacing / 2;
+                
+                // 复用结算页面的星星渲染函数
+                for (let i = 0; i < 6; i++) {
+                    const starX = startX + i * starSpacing;
+                    const starY = textY + 45;
+                    renderStar(i, starX, starY, starSize, rankInfo.stars);
+                }
+            }
+            
+            // 绘制附加文案
+            if (promotionText) {
+                ctx.fillStyle = '#ffd700';
+                ctx.font = '14px Coca-ColaCareFontKaiTi';
+                ctx.textAlign = 'center';
+                ctx.fillText(promotionText, centerX, y + 80);
+            }
+        }
+        
+        function updateHighScore(score) {
+            const highScore = getHighScore();
+            if (score > highScore) {
+                localStorage.setItem('fujigame_highscore', Math.floor(score));
+                return true;
+            }
+            return false;
+        }
+        
+        function getHighScore() {
+            return parseInt(localStorage.getItem('fujigame_highscore') || '0');
+        }
+        
+        function getGameRecords() {
+            return JSON.parse(localStorage.getItem('fujigame_records') || '[]');
+        }
+        
+        // 启动游戏
+        gameLoop();
+    </script>
+</body>
+</html>
